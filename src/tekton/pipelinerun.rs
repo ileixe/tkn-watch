@@ -31,9 +31,11 @@ pub async fn get(
     for child in status.child_references.as_ref().unwrap() {
         let obj = taskrun.get(&child.name).await?;
 
-        let child_status = obj.data["status"]
-            .as_object()
-            .ok_or_else(|| anyhow::anyhow!("TaskRun has no status"))?;
+        let child_status = obj.data["status"].as_object();
+
+        if child_status.is_none() {
+            return Ok(PipelineRun { metadata, status: None, child_status: None });
+        }
 
         let child_status_str = serde_json::to_string(&child_status)?;
         let child_status: TaskRunStatus = serde_json::from_str(&child_status_str)?;
