@@ -1,7 +1,8 @@
-use std::{iter::zip, vec};
+use std::{env, iter::zip, vec};
 
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
 use kube::{core::DynamicObject, Api};
+use spinners::{Spinner, Spinners};
 
 use crate::{
     tekton::{
@@ -135,13 +136,16 @@ pub async fn refresh_pr(
     refresh_seconds: u64,
     quiet: bool,
 ) -> anyhow::Result<()> {
-    let sp = if quiet {
-        spinner::SpinnerBuilder::new(String::new()).spinner(vec![]).start()
+    // Do not print spinner when quite specified or TERM is not defined
+    let sp = if quiet || env::var("TERM").is_err() {
+        None
     } else {
-        spinner::SpinnerBuilder::new(format!(
+        Some(Spinner::new(
+            Spinners::Dots9,
+            format!(
             "Refreshing pipelinerun status every {refresh_seconds} seconds. Press Ctrl+C to quit."
+        ),
         ))
-        .start()
     };
     loop {
         let pr =
@@ -162,7 +166,10 @@ pub async fn refresh_pr(
                         // return a non-zero exit code
                         std::process::exit(1);
                     }
-                    sp.message(utils::get_running_char("failed"));
+                    sp.map_or_else(
+                        || println!("{}", utils::get_running_char("failed")),
+                        |mut s| s.stop_with_message(utils::get_running_char("failed")),
+                    );
                     return Err(anyhow::anyhow!("pipelinerun has failed"));
                 }
                 break;
@@ -170,7 +177,10 @@ pub async fn refresh_pr(
         }
         std::thread::sleep(std::time::Duration::from_secs(refresh_seconds));
     }
-    sp.message(utils::get_running_char("succeeded"));
+    sp.map_or_else(
+        || println!("{}", utils::get_running_char("succeeded")),
+        |mut s| s.stop_with_message(utils::get_running_char("succeeded")),
+    );
     Ok(())
 }
 
